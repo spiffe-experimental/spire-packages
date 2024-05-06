@@ -1,0 +1,12 @@
+[Unit]
+Description=SPIRE Agent
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/spire-agent
+Restart=always
+User=myproject
+Group=myproject
+
+[Install]
+WantedBy=multi-user.target
