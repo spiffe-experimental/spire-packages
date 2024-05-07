@@ -246,13 +246,12 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            artifacts/spire-agent-${{ steps.prep_files.outputs.version }}-1.x86_64.rpm
-            artifacts/spire-server-${{ steps.prep_files.outputs.version }}-1.x86_64.rpm
-            artifacts/spire-agent_${{ steps.prep_files.outputs.version }}-1_amd64.deb
-            artifacts/spire-server_${{ steps.prep_files.outputs.version }}-1_amd64.deb
-
-            spire-agent-${{ steps.prep_files.outputs.version }}-1.x86_64.rpm
+          files: artifacts/* #|
+          #   artifacts/spire-agent-${{ steps.prep_files.outputs.version }}-1.x86_64.rpm
+          #   artifacts/spire-server-${{ steps.prep_files.outputs.version }}-1.x86_64.rpm
+          #   artifacts/spire-agent_${{ steps.prep_files.outputs.version }}-1_amd64.deb
+          #   artifacts/spire-server_${{ steps.prep_files.outputs.version }}-1_amd64.deb
+          #   spire-agent-${{ steps.prep_files.outputs.version }}-1.x86_64.rpm
           tag_name: ${{ steps.prep_files.outputs.tag }}
           name: Release ${{ steps.prep_files.outputs.tag }}
           draft: false
