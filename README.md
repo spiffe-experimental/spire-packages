@@ -10,7 +10,7 @@ All are tested with the latest container release at the time of testing.
 
 The workflow runs nightly. If there's a new tag in the official SPIRE repo, it builds the corresponding packages. 
 This means it may take a day after release before packages are ready. The test script verifies that all files
-are created and that the binaries actually run, but don't test any functionality. (The assumption is that any 
+are created and that the binaries actually run, but doesn't test any functionality. (The assumption is that any 
 tagged SPIRE release has already passed all the functional tests.)
 
 The packages also install a systemd unit to run spire-agent and spire-server, and corresponding user accounts. 

@@ -27,7 +27,7 @@ install_rpm() {
         echo "$1 installed successfully."
     fi
     # Assuming a simple test that just checks rpm is installed
-    docker exec $container_id rpm -q $1
+    docker exec $container_id rpm -q /pkg/$1
     if [ $? -ne 0 ]; then
         echo "Testing $1 failed."
         exit 1
