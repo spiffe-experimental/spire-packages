@@ -240,7 +240,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.prep_files.outputs.files }}
+          files: artifacts/*.{deb,rpm} #${{ steps.prep_files.outputs.files }}
           tag_name: ${{ steps.prep_files.outputs.tag }}
           name: Release ${{ steps.prep_files.outputs.tag }}
           draft: false
