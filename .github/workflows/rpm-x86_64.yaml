@@ -212,7 +212,6 @@ jobs:
   release:
     runs-on: ubuntu-20.04
     needs: test
-    if: needs.build.outputs.package_already_exists == 'false'
     steps:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
@@ -230,14 +229,13 @@ jobs:
           while IFS= read -r line; do
             # Assuming each line in your manifest is in the form KEY=filename
             FILENAME=$(echo "$line" | cut -d '=' -f 2)
-            FILES="${FILES} artifacts/${FILENAME}"  # Append filename to FILES
+            FILES="${FILES} artifacts/${FILENAME}\n"  # Append filename to FILES
           done < manifest
           FILES=$(echo $FILES | xargs)  # Trim and ensure proper space separation
           echo "Files to release: $FILES"
           echo "::set-output name=files::$FILES"
           echo "::set-output name=tag::$(cat tag)"
           echo Selected files for release: $FILES
-          
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
