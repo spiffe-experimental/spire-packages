@@ -1,0 +1,3 @@
+bin/spire-server usr/bin
+conf/server/*.conf etc/spire/server
+spire-server.service lib/systemd/system

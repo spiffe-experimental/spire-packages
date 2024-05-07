@@ -1,0 +1,4 @@
+bin/spire-agent usr/bin
+conf/agent/*.conf etc/spire/agent
+conf/agent/dummy_root_ca.crt etc/spire/agent
+spire-agent.service lib/systemd/system

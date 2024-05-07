@@ -1,0 +1,19 @@
+Source: spire
+Section: utils
+Priority: optional
+Maintainer: Daniel Feldman <dfeldman.mn@gmail.com>
+Build-Depends: debhelper (>= 9), systemd
+Standards-Version: 4.5.0
+Homepage: https://github.com/spiffe/spire
+
+Package: spire-agent
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, systemd
+Description: Client agent for SPIRE
+ Agent for SPIRE, which authenticates and delivers certificates to workloads using a workload API UDS socket.
+
+Package: spire-server
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, systemd
+Description: Server for SPIRE
+ Server for SPIRE, which authenticates and delivers certificates to workloads using a workload API UDS socket.

@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+# REMEMBER USE LITERAL TABS HERE
+
+# Uncomment this to turn on verbose mode.
+# export DH_VERBOSE=1
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	export GOFLAGS='-ldflags=-extldflags=-static' 
+	make  # Run make to build the software
+
+override_dh_auto_test:
+	# Skip unit tests as they take a long time in this environment

@@ -1,0 +1,14 @@
+
+
+[Unit]
+Description=SPIRE Server
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/spire-server
+Restart=always
+User=spire-server
+Group=spire-server
+
+[Install]
+WantedBy=multi-user.target

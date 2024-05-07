@@ -1,0 +1,248 @@
+name: Build, Test, Release RPMs and DEBs
+
+permissions: write-all
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # Run at midnight UTC every day
+  workflow_dispatch: # Run manually
+    inputs:
+      version:
+        description: "SPIRE Version to build (leave empty for latest)"
+        required: false
+        default: ""
+
+jobs:
+  build:
+    # We're building an RPM, which really should be on an RPM-based distribution, but GitHub only has ubuntu for free.
+    # We use 20.04 because we will be dynamically linked to libc, and want to be compatible with older distros.
+    # If this is updated to a newer version, be sure to update the requirements in the spec file.
+    runs-on: ubuntu-20.04
+    # If we want to build the RPMs on an RPM-based distro, we can use a Github Runner container
+    # with docker-in-docker. This is not needed yet.
+    # services:
+    #   docker:
+    #     image: docker:dind
+    #     options: --privileged -v /var/run/docker.sock:/var/run/docker.sock
+    # container:
+    #   image: centos:8
+    outputs:
+      package_already_exists: ${{ steps.package_exists.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # - name: Install jq
+      #   run: dnf install -y jq curl
+
+      # get the latest tag from the spire-agent repository
+      - name: Get latest tag from spire-agent repo
+        id: get_tag
+        run: |
+          if [ -z "${{ github.event.inputs.version }}" ]; then
+            TAG=$(curl -sSL "https://api.github.com/repos/spiffe/spire/tags" | jq -r '.[0].name')
+            echo "No version requested. Building latest tag $TAG"
+          else
+            TAG="${{ github.event.inputs.version }}"
+          fi
+          echo "Building tag $TAG"
+          # Set output is deprecated. Need to replace everywhere in this file. 
+          echo "::set-output name=tag::$TAG"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # set the package name based on the tag, which is used elsewhere in the script.
+      - name: Set package name
+        id: set_package_name
+        run: |
+          VERSION=$(echo ${{ steps.get_tag.outputs.tag }} | sed 's/v//')
+          AGENT_PACKAGE_NAME="spire-agent-$VERSION-1.x86_64.rpm"
+          echo "::set-output name=agent_package_name::$AGENT_PACKAGE_NAME"
+
+      # check if the package already exists in the spire-packages repository
+      # if it does, every other step is skipped
+      - name: Check if package exists
+        id: package_exists
+        run: |
+          # We only check the existence of the agent rpm.
+          if curl -sSL -f "https://github.com/spiffe-experimental/spire-packages/releases/download/${{ steps.get_tag.outputs.tag }}/${{ steps.set_package_name.outputs.agent_package_name }}" >/dev/null 2>&1; then
+            echo "Package already exists in spire-packages repository. Skipping all other steps."
+            echo "::set-output name=exists::true"
+          else
+            echo "::set-output name=exists::false"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build RPM packages
+        if: steps.package_exists.outputs.exists == 'false'
+        id: build_rpm
+        run: |
+          # Prep system
+          sudo apt-get update && sudo apt-get install rpm rpm-common autoconf automake make gcc git
+          # rpmbuild likes to be in the home directory, with these subdirs
+          # Normally made with rpmdev-setuptree, but that's not available on ubuntu
+          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          VERSION=$(echo ${{ steps.get_tag.outputs.tag }} | sed 's/v//')
+          # It is possible to automatically download the source with spectool, but spectool is not on ubuntu at all
+          echo Downloading https://github.com/spiffe/spire/archive/v${VERSION}.tar.gz to ~/rpmbuild/SOURCES/v${VERSION}.tar.gz
+          curl -L https://github.com/spiffe/spire/archive/v${VERSION}.tar.gz > ~/rpmbuild/SOURCES/v${VERSION}.tar.gz
+
+          # Actually build the RPMs
+          # rpmbuild extracts the source tar package, and runs make. Then it collects the output files and assembles an rpm.
+          # The purpose of building here is to make sure the spec file really builds the resulting binary (for reproducibility).
+          # It may be best to run rpmbuild inside an older RPM-based distro to ensure compatibility.
+          rpmbuild -ba --define "version $VERSION" ./spire-agent-rpm-x86_64/rpm.spec
+          rpmbuild -ba --define "version $VERSION" ./spire-server-rpm-x86_64/rpm.spec
+
+          # Build source RPMs (SRPMS)
+          rpmbuild -bs --define "version $VERSION" ./spire-agent-rpm-x86_64/rpm.spec
+          rpmbuild -bs --define "version $VERSION" ./spire-server-rpm-x86_64/rpm.spec
+
+          # Build the artifacts directory
+          mkdir artifacts
+          AGENT_PACKAGE_PATH=~/rpmbuild/RPMS/x86_64/spire-agent-${VERSION}-1.x86_64.rpm
+          SERVER_PACKAGE_PATH=~/rpmbuild/RPMS/x86_64/spire-server-${VERSION}-1.x86_64.rpm
+          AGENT_SRPM_PATH=~/rpmbuild/SRPMS/spire-agent-${VERSION}-1.src.rpm
+          SERVER_SRPM_PATH=~/rpmbuild/SRPMS/spire-server-${VERSION}-1.src.rpm
+          echo AGENT_RPM=spire-agent-${VERSION}-1.x86_64.rpm >> artifacts/manifest
+          echo SERVER_RPM=spire-server-${VERSION}-1.x86_64.rpm >> artifacts/manifest
+          echo AGENT_SRPM=spire-agent-${VERSION}-1.src.rpm >> artifacts/manifest
+          echo SERVER_SRPM=spire-server-${VERSION}-1.src.rpm >> artifacts/manifest
+          echo TAG=${{ steps.get_tag.outputs.tag }} >> artifacts/tag
+          cat artifacts/manifest
+          ls -l artifacts
+          cp $AGENT_PACKAGE_PATH artifacts/
+          cp $SERVER_PACKAGE_PATH artifacts/
+          cp $AGENT_SRPM_PATH artifacts/
+          cp $SERVER_SRPM_PATH artifacts/
+
+      - name: Build DEB packages
+        if: steps.package_exists.outputs.exists == 'false'
+        run: |
+          # Prep system
+          # This installs a LOT of packages
+          sudo apt-get update && sudo apt-get install devscripts debhelper dh-make lintian build-essential fakeroot curl
+          VERSION=$(echo ${{ steps.get_tag.outputs.tag }} | sed 's/v//')
+          # To be a little more efficient, we could copy the built binaries over from the rpm build... but we don't
+          curl -L https://github.com/spiffe/spire/archive/v${VERSION}.tar.gz > spire-${VERSION}.tar.gz
+          tar -xzf spire-${VERSION}.tar.gz
+
+          # Prep source tree
+          cd spire-${VERSION}
+          cp ../spire-agent.service .
+          cp ../spire-server.service .
+          dh_make -e dfeldman.mn@gmail.com -f ../spire-${VERSION}.tar.gz -s -y
+          cp ../debian/compat debian/compat
+          cp ../debian/control debian/control
+          cp ../debian/rules debian/rules
+          cp ../debian/spire-agent.install debian/spire-agent.install
+          cp ../debian/options debian/source/options
+          dch -v ${VERSION}-1 "Update to ${VERSION}-1"
+
+          # Actually build the package
+          # TODO - We really should run dpkg-commit to add a patch file for the systemd service file
+          # to the Debian package.
+          # That will allow us to remove -b below, and build source packages directly. 
+          # Otherwise dpkg-buildpackage will refuse to create a modified source package.
+          dpkg-buildpackage -us -uc -d -b
+          ls -l
+          cd ..
+          ls -l
+          
+          # Add these to the artifacts directory
+          mkdir -p artifacts
+          cp spire-agent_${VERSION}-1_amd64.deb artifacts/
+          cp spire-server_${VERSION}-1_amd64.deb artifacts/
+          ls -l artifacts
+          echo AGENT_DEB=spire-agent_${VERSION}-1_amd64.deb >> artifacts/manifest
+          echo SERVER_DEB=spire-server_${VERSION}-1_amd64.deb >> artifacts/manifest
+
+      - name: Upload Artifacts
+        if: steps.package_exists.outputs.exists == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: spire-artifacts
+          path: artifacts
+          if-no-files-found: warn
+
+  test:
+    runs-on: ubuntu-20.04
+    needs: build
+    if: needs.build.outputs.package_already_exists == 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: spire-artifacts
+          path: artifacts
+          if-no-files-found: warn
+
+      - name: Copy needed RPMs for testing
+        run: |
+          cat artifacts/manifest
+          ls -l artifacts
+          cp artifacts/spire-agent*x86_64.rpm agent.rpm
+          cp artifacts/spire-server*x86_64.rpm server.rpm
+          cp artifacts/spire-agent*.deb agent.deb
+          cp artifacts/spire-server*.deb server.deb
+
+      - name: Test DEB on Ubuntu latest
+        run: bash ./test-package.sh ubuntu:latest agent.deb server.deb
+
+      - name: Test DEB on Debian latest
+        run: bash ./test-package.sh debian:latest agent.deb server.deb
+
+      - name: Test RPM on OpenSuSE LEAP latest
+        run: bash ./test-package.sh opensuse/leap:latest agent.rpm server.rpm
+
+      - name: Test RPM on Centos latest
+        run: bash ./test-package.sh quay.io/centos/centos:stream9 agent.rpm server.rpm
+
+      - name: Test RPM on Amazon Linux latest
+        run: bash ./test-package.sh amazonlinux:latest agent.rpm server.rpm
+
+      - name: Test RPM on Red Hat Enterprise Linux UBI latest
+        run: bash ./test-package.sh redhat/ubi9:latest agent.rpm server.rpm
+
+      - name: Test RPM on Fedora latest
+        run: bash ./test-package.sh fedora:latest agent.rpm server.rpm
+
+  release:
+    runs-on: ubuntu-20.04
+    needs: test
+    if: needs.build.outputs.package_already_exists == 'false'
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: spire-artifacts
+          path: artifacts
+          if-no-files-found: warn
+
+      - name: Read Manifest and Prepare Files String
+        id: prep_files
+        run: |
+          cd artifacts
+          FILES=""  # Initialize the FILES variable
+          while IFS= read -r line; do
+            # Assuming each line in your manifest is in the form KEY=filename
+            FILENAME=$(echo "$line" | cut -d '=' -f 2)
+            FILES="${FILES} ${FILENAME}"  # Append filename to FILES
+          done < manifest
+          FILES=$(echo $FILES | xargs)  # Trim and ensure proper space separation
+          echo "Files to release: $FILES"
+          echo "::set-output name=files::$FILES"
+          echo "::set-output name=tag::$(cat tag)"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.prep_files.outputs.files }}
+          tag_name: ${{ steps.prep_files.outputs.tag }}
+          name: Release ${{ steps.prep_files.outputs.tag }}
+          draft: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

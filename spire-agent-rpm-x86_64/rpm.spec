@@ -6,7 +6,6 @@ License:        MIT
 URL:            https://github.com/spiffe/spire
 Source0:        https://github.com/spiffe/spire/archive/v%{version}.tar.gz
 
-#BuildRequires:  golang >= 1.20
 Requires:       systemd
 
 %description
@@ -20,6 +19,7 @@ Agent for SPIRE, which authenticates and delivers certificates to workloads usin
 %setup -q -n spire-%{version}
 
 %build
+export GOFLAGS='-ldflags=-extldflags=-static'
 make
 
 %install
@@ -30,15 +30,15 @@ install -D -m 0644 %{_builddir}/spire-%{version}/conf/agent/agent_full.conf %{bu
 install -D -m 0644 %{_builddir}/spire-%{version}/conf/agent/agent.conf %{buildroot}%{_sysconfdir}/spire/agent/agent.conf.example
 install -D -m 0644 %{_builddir}/spire-%{version}/conf/agent/agent_container.conf %{buildroot}%{_sysconfdir}/spire/agent/agent_container.conf.example
 install -D -m 0644 %{_builddir}/spire-%{version}/conf/agent/dummy_root_ca.crt %{buildroot}%{_sysconfdir}/spire/agent/dummy_root_ca.crt
-install -D -m 0644 spire-agent.service
+
+# spire-agent.service comes from the spire-packages repo, not the main repo
+install -D -m 0644 %(pwd)/spire-agent.service %{buildroot}/usr/lib/systemd/system/spire-agent.service
 
 %pre
 # Check if the user exists before trying to create it
 if ! getent passwd spire-agent > /dev/null 2>&1; then
     /usr/sbin/useradd --system --no-create-home --user-group spire-agent > /dev/null 2>&1 || :
 fi
-
-
 
 %post
 %systemd_post spire-agent.service
@@ -58,8 +58,8 @@ fi
 %{_sysconfdir}/spire/agent/agent.conf.example
 %{_sysconfdir}/spire/agent/agent_container.conf.example
 %{_sysconfdir}/spire/agent/dummy_root_ca.crt
-#%{_unitdir}/spire-agent.service
+/usr/lib/systemd/system/spire-agent.service
 
 %changelog
-* Sun May 2 2023 
-- Initial package
+* Tue May 02 2024 Daniel Feldman <dfeldman.mn@gmail.com> - 1.9.0-1
+- Initial release of the package.
