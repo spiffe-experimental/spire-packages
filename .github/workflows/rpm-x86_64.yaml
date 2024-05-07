@@ -108,7 +108,7 @@ jobs:
           echo SERVER_RPM=spire-server-${VERSION}-1.x86_64.rpm >> artifacts/manifest
           echo AGENT_SRPM=spire-agent-${VERSION}-1.src.rpm >> artifacts/manifest
           echo SERVER_SRPM=spire-server-${VERSION}-1.src.rpm >> artifacts/manifest
-          echo TAG=${{ steps.get_tag.outputs.tag }} >> artifacts/tag
+          echo ${{ steps.get_tag.outputs.tag }} >> artifacts/tag
           cat artifacts/manifest
           ls -l artifacts
           cp $AGENT_PACKAGE_PATH artifacts/
@@ -225,16 +225,19 @@ jobs:
         id: prep_files
         run: |
           cd artifacts
+          ls -l 
           FILES=""  # Initialize the FILES variable
           while IFS= read -r line; do
             # Assuming each line in your manifest is in the form KEY=filename
             FILENAME=$(echo "$line" | cut -d '=' -f 2)
-            FILES="${FILES} ${FILENAME}"  # Append filename to FILES
+            FILES="${FILES} artifacts/${FILENAME}"  # Append filename to FILES
           done < manifest
           FILES=$(echo $FILES | xargs)  # Trim and ensure proper space separation
           echo "Files to release: $FILES"
           echo "::set-output name=files::$FILES"
           echo "::set-output name=tag::$(cat tag)"
+          echo Selected files for release: $FILES
+          
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -242,7 +245,7 @@ jobs:
           files: ${{ steps.prep_files.outputs.files }}
           tag_name: ${{ steps.prep_files.outputs.tag }}
           name: Release ${{ steps.prep_files.outputs.tag }}
-          draft: true
+          draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

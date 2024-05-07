@@ -19,6 +19,8 @@ install_deb() {
 }
 
 install_rpm() {
+    # RPM had an issue running systemd commands from RPM scripts without having a full
+    # interactive shell. Hence running this inside bash -c. 
     docker exec $container_id /bin/bash -c "rpm -vv -i /pkg/$1"
     if [ $? -ne 0 ]; then
         echo "Failed to install $1"
